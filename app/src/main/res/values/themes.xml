@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Mengubah parent theme ke salah satu tema dasar Android
+      yang pasti tersedia. Untuk aplikasi Compose, file ini
+      kurang begitu penting karena tema utama diatur di kode Kotlin.
+    -->
+    <style name="Theme.LuasLingkaranApp" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>
