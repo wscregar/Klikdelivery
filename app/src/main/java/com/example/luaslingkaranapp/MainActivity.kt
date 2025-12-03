@@ -2,10 +2,10 @@ package com.example.luaslingkaranapp
 
 import android.content.Intent
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.annotation.DrawableRes
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -15,45 +15,71 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
 import com.example.luaslingkaranapp.ui.theme.LuasLingkaranAppTheme
 import android.os.Parcelable
 import kotlinx.parcelize.Parcelize
-// DATA CLASS
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
+import com.example.luaslingkaranapp.chat.ChatListScreen
+import com.example.luaslingkaranapp.chat.ChatRoomScreen
+import com.example.luaslingkaranapp.navbar.CartManager
+import com.example.luaslingkaranapp.navbar.OrderStatus
+
+// --- DATA MODELS ---
 data class PromoBanner(val id: Int, @DrawableRes val imageRes: Int)
 data class FoodCategory(val name: String, @DrawableRes val iconRes: Int)
 
 @Parcelize
 data class MenuItem(val name: String, val price: String) : Parcelable
+
 data class Restaurant(
     val name: String,
     val category: String,
     val rating: Double,
     val distance: String,
     @DrawableRes val imageRes: Int,
-    val latitude: Double, // TAMBAHAN
-    val longitude: Double, // TAMBAHAN
-    val menu: List<MenuItem> // <-- TAMBAHAN
+    val latitude: Double,
+    val longitude: Double,
+    val menu: List<MenuItem>
 )
 
-// Interface untuk mensimulasikan pola OnClickListener
-interface CategoryClickListener {
-    fun onCategoryClicked(category: FoodCategory)
+// Data Model untuk Keranjang (Dummy)
+data class CartItem(val name: String, val price: Int, var quantity: Int)
+
+// Data Model untuk History (Dummy)
+data class OrderHistory(val date: String, val restaurantName: String, val items: String, val total: String, val status: String)
+
+// --- NAVIGATION ITEMS ---
+sealed class BottomNavItem(val route: String, val title: String, val icon: ImageVector) {
+    object Home : BottomNavItem("home", "Home", Icons.Filled.Home)
+    object Chat : BottomNavItem("chat", "Chat", Icons.Filled.Chat) // simplified route
+    object Cart : BottomNavItem("cart", "Keranjang", Icons.Filled.ShoppingCart)
+    object History : BottomNavItem("history", "History", Icons.Filled.History)
 }
 
-// DATA DUMMY
+// --- DATA DUMMY ---
 val promoBanners = listOf(
     PromoBanner(1, R.drawable.banner_promo1),
     PromoBanner(2, R.drawable.banner_promo3),
@@ -61,6 +87,7 @@ val promoBanners = listOf(
 )
 
 val foodCategories = listOf(
+    FoodCategory("Semua", R.drawable.ic_launcher_background), // Icon placeholder
     FoodCategory("Nasi", R.drawable.kategori_nasi),
     FoodCategory("Sate", R.drawable.kategori_sate),
     FoodCategory("Bakso", R.drawable.kategori_bakso),
@@ -71,176 +98,411 @@ val foodCategories = listOf(
 
 val restaurants = listOf(
     Restaurant(
-        "Sate Ayam Pak Budi",
-        "Sate, Bakaran",
-        4.8,
-        "1.2 km",
-        R.drawable.resto_sate,
-        -7.2759, 112.7538,
-    menu = listOf(
-        MenuItem("Sate Ayam", "20.000"),
-        MenuItem("Sate Kambing", "30.000"),
-        MenuItem("Sate Padang", "25.500"),
-        MenuItem("Sop Buntut", "43.000")
-    )),
+        "Sate Ayam Pak Budi", "Sate, Bakaran", 4.8, "1.2 km", R.drawable.resto_sate, -7.2759, 112.7538,
+        menu = listOf(MenuItem("Sate Ayam", "20.000"), MenuItem("Sate Kambing", "30.000"))
+    ),
     Restaurant(
-        "Bakso Cak Man",
-        "Bakso, Mie",
-        4.9,
-        "0.8 km",
-        R.drawable.resto_bakso,
-        -7.2882, 112.7490,
-    menu = listOf(
-        MenuItem("Bakso Biasa", "10.000"),
-        MenuItem("Bakso Spesial", "16.500"),
-        MenuItem("Bakso Urat", "13.000"),
-        MenuItem("Bakso Jeroan", "17.500")
-    )),
+        "Bakso Cak Man", "Bakso, Mie", 4.9, "0.8 km", R.drawable.resto_bakso, -7.2882, 112.7490,
+        menu = listOf(MenuItem("Bakso Biasa", "10.000"), MenuItem("Bakso Spesial", "16.500"))
+    ),
     Restaurant(
-        "Nasi Goreng Merdeka",
-        "Nasi, Chinese Food",
-        4.7,
-        "2.5 km",
-        R.drawable.resto_nasgor,
-        -7.2888, 112.793,
-        menu = listOf(
-        MenuItem("Nasi goreng Spesial", "14.500"),
-        MenuItem("Nasi goreng Biasa", "10.000"),
-        MenuItem("Nasi goreng Mawut", "17.500")
-    )),
+        "Nasi Goreng Merdeka", "Nasi, Chinese Food", 4.7, "2.5 km", R.drawable.resto_nasgor, -7.2888, 112.793,
+        menu = listOf(MenuItem("Nasi goreng Spesial", "14.500"), MenuItem("Nasi goreng Biasa", "10.000"))
+    ),
     Restaurant(
-        "Kopi Kenangan Senja",
-        "Minuman Dingin",
-        4.9,
-        "0.5 km",
-        R.drawable.resto_kopken,
-        -7.2800, 112.7900,
-        menu = listOf(
-            MenuItem("Kopi senja", "16.500"),
-            MenuItem("Americano", "10.000"),
-            MenuItem("Cappucino", "12.500"),
-            MenuItem("Kopi Tubruk", "9.000"),
-            MenuItem("Espresso", "10.000")
-        )),
+        "Kopi Kenangan Senja", "Minuman Dingin", 4.9, "0.5 km", R.drawable.resto_kopken, -7.2800, 112.7900,
+        menu = listOf(MenuItem("Kopi senja", "16.500"), MenuItem("Americano", "10.000"))
+    ),
     Restaurant(
-        "Geprek Juara",
-        "Ayam, Pedas",
-        4.6,
-        "3.1 km",
-        R.drawable.resto_geprek,
-        -7.2905, 112.8001,
-        menu = listOf(
-            MenuItem("Geprek Biasa", "10.000"),
-            MenuItem("Geprek Spesial", "16.500"),
-            MenuItem("Geprek Bakar", "12.000"),
-            MenuItem("Geprek Komplit", "18.000"),
-            MenuItem("Geprek Saus Spesial", "14.000")
-        )),
+        "Geprek Juara", "Ayam, Pedas", 4.6, "3.1 km", R.drawable.resto_geprek, -7.2905, 112.8001,
+        menu = listOf(MenuItem("Geprek Biasa", "10.000"), MenuItem("Geprek Spesial", "16.500"))
+    ),
     Restaurant(
-        "Martabak Sinar Bulan",
-        "Martabak, Manis",
-        4.8,
-        "1.8 km",
-        R.drawable.resto_martabak,
-        -7.2785, 112.7650,
-        menu = listOf(
-            MenuItem("Martabak Kecil", "26.500"),
-            MenuItem("Martabak Sedang", "32.500"),
-            MenuItem("Martabak Besar", "45.500")
-            )),
+        "Martabak Sinar Bulan", "Martabak, Manis", 4.8, "1.8 km", R.drawable.resto_martabak, -7.2785, 112.7650,
+        menu = listOf(MenuItem("Martabak Kecil", "26.500"), MenuItem("Martabak Sedang", "32.500"))
+    ),
 )
-
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             LuasLingkaranAppTheme {
-                FoodAppHomeScreen()
+                MainScreen()
             }
         }
     }
 }
-// fungsi untuk menampilkan layar utama aplikasi
-@Composable
-fun FoodAppHomeScreen() {
-    val context = LocalContext.current
 
-    // Implementasi dari interface onClickListener
-    val categoryListener = object : CategoryClickListener {
-        override fun onCategoryClicked(category: FoodCategory) {
-            // Logika yang dijalankan saat kategori diklik
-            Toast.makeText(context, "Listener Kategori: ${category.name}", Toast.LENGTH_SHORT).show()
+@Composable
+fun MainScreen() {
+    val navController = rememberNavController()
+
+    // --- ambil username dari Firestore (tetap seperti sebelumnya) ---
+    val auth = FirebaseAuth.getInstance()
+    val firestore = FirebaseFirestore.getInstance()
+    val uid = auth.currentUser?.uid
+    var username by remember { mutableStateOf("User") }
+
+    LaunchedEffect(uid) {
+        if (uid != null) {
+            firestore.collection("users")
+                .document(uid)
+                .get()
+                .addOnSuccessListener { document ->
+                    if (document.exists()) {
+                        username = document.getString("username") ?: "User"
+                    }
+                }
         }
     }
-    // fungsi scroll vertikal
+    // --- end username ---
+
+    val items = listOf(
+        BottomNavItem.Home,
+        BottomNavItem.Chat,
+        BottomNavItem.Cart,
+        BottomNavItem.History
+    )
+
+    Scaffold(
+        bottomBar = {
+            NavigationBar(containerColor = Color.White) {
+                val navBackStackEntry by navController.currentBackStackEntryAsState()
+                val currentRoute = navBackStackEntry?.destination?.route
+
+                items.forEach { item ->
+                    NavigationBarItem(
+                        icon = {
+                            if (item is BottomNavItem.Cart && CartManager.totalItems() > 0) {
+                                BadgedBox(
+                                    badge = { Badge { Text(CartManager.totalItems().toString()) } }
+                                ) {
+                                    Icon(item.icon, contentDescription = item.title)
+                                }
+                            } else {
+                                Icon(item.icon, contentDescription = item.title)
+                            }
+                        },
+                        label = { Text(item.title) },
+                        selected = currentRoute == item.route,
+                        onClick = {
+                            navController.navigate(item.route) {
+                                popUpTo(navController.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        }
+                    )
+                }
+            }
+        }
+    ) { padding ->
+        NavHost(
+            navController = navController,
+            startDestination = BottomNavItem.Home.route,
+            modifier = Modifier.padding(padding)
+        ) {
+            composable(BottomNavItem.Home.route) {
+                HomeScreen(username = username)
+            }
+
+            composable(BottomNavItem.Chat.route) {
+                ChatListScreen(navController = navController)
+            }
+
+            composable("chatRoom/{chatId}") {
+                ChatRoomScreen(chatId = it.arguments?.getString("chatId") ?: "")
+            }
+
+            composable(BottomNavItem.Cart.route) {
+                CartScreen()
+            }
+
+            composable(BottomNavItem.History.route) {
+                HistoryScreen()
+            }
+        }
+    }
+}
+// --- HOME SCREEN ---
+@Composable
+fun HomeScreen(username: String) {
+    var selectedCategory by remember { mutableStateOf("Semua") }
+    val context = LocalContext.current
+
+    val filteredRestaurants = if (selectedCategory == "Semua") {
+        restaurants
+    } else {
+        restaurants.filter { it.category.contains(selectedCategory, ignoreCase = true) }
+    }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFFF1F5F9))
     ) {
-        item { HeaderSection() }
-        item {
-            PromoSection(
-                banners = promoBanners,
-                // onClick untuk promo
-                onPromoClick = { banner ->
-                    Toast.makeText(context, "OnClick Promo ID: ${banner.id}", Toast.LENGTH_SHORT).show()
-                }
-            )
-        }
+        item { HeaderSection(username = username) }
+        item { PromoSection(promoBanners) }
         item {
             CategorySection(
                 categories = foodCategories,
-                // teruskan objek listener yang sudah dibuat
-                listener = categoryListener
-            )
-        }
-        item {
-            Text(
-                text = "Restoran Terdekat",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(start = 16.dp, top = 24.dp, bottom = 8.dp)
-            )
-        }
-        items(restaurants) { restaurant ->
-            RestaurantCard(
-                restaurant = restaurant,
-                // onClick
-                onClick = {
-                    // Intent
-                    // Membuat Intent untuk pindah ke RestaurantDetailActivity
-                    val intent = Intent(context, RestaurantDetailActivity::class.java).apply {
-                        // Mengisi package dengan data ke dalam Intent
-                        // Setiap data diberi key seperti "EXTRA_NAME"
-                        putExtra("EXTRA_NAME", restaurant.name)
-                        putExtra("EXTRA_CATEGORY", restaurant.category)
-                        putExtra("EXTRA_RATING", restaurant.rating)
-                        putExtra("EXTRA_DISTANCE", restaurant.distance)
-                        putExtra("EXTRA_IMAGE_RES", restaurant.imageRes)
-                        putExtra("EXTRA_LATITUDE", restaurant.latitude)
-                        putExtra("EXTRA_LONGITUDE", restaurant.longitude)
-                        putParcelableArrayListExtra("EXTRA_MENU", ArrayList(restaurant.menu))
-                    }
-                    // Menjalankan Intent untuk memulai Activity baru
-                    context.startActivity(intent)
+                selectedCategory = selectedCategory,
+                onCategorySelected = { category ->
+                    selectedCategory = category.name
                 }
             )
+        }
+
+        item {
+            Text(
+                text = "Restoran Terdekat (${filteredRestaurants.size})",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(start = 16.dp, top = 24.dp, bottom = 8.dp),
+                color = Color.Black
+            )
+        }
+
+        if (filteredRestaurants.isEmpty()) {
+            item {
+                Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                    Text("Tidak ada restoran di kategori ini", color = Color.Gray)
+                }
+            }
+        } else {
+            items(filteredRestaurants) { restaurant ->
+                RestaurantCard(
+                    restaurant = restaurant,
+                    onClick = {
+                        val intent = Intent(context, RestaurantDetailActivity::class.java).apply {
+                            putExtra("EXTRA_NAME", restaurant.name)
+                            putExtra("EXTRA_CATEGORY", restaurant.category)
+                            putExtra("EXTRA_RATING", restaurant.rating)
+                            putExtra("EXTRA_DISTANCE", restaurant.distance)
+                            putExtra("EXTRA_IMAGE_RES", restaurant.imageRes)
+                            putExtra("EXTRA_LATITUDE", restaurant.latitude)
+                            putExtra("EXTRA_LONGITUDE", restaurant.longitude)
+                            putParcelableArrayListExtra("EXTRA_MENU", ArrayList(restaurant.menu))
+                        }
+                        context.startActivity(intent)
+                    }
+                )
+            }
         }
     }
 }
 
-// fungsi untuk header aplikasi
+// --- CART SCREEN ---
 @Composable
-fun HeaderSection() {
+fun CartScreen() {
+    val cartItems = CartManager.cartItems
+
+    val subtotal = cartItems.sumOf { it.price * it.quantity }
+    val ongkir = if (cartItems.isNotEmpty()) 10000 else 0
+    val total = subtotal + ongkir
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFFF1F5F9))
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color.White)
+                .padding(16.dp)
+        ) {
+            Text(
+                "Keranjang Pesanan",
+                fontSize = 20.sp,
+                color = Color.Black,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        LazyColumn(
+            modifier = Modifier
+                .weight(1f)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            items(cartItems) { item ->
+                Card(colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(item.name, color = Color.Black, fontWeight = FontWeight.Bold)
+                            Text("Rp ${item.price}", color = Color.Black, fontSize = 12.sp)
+                        }
+                        Row {
+                            IconButton(onClick = {
+                                if (item.quantity > 1) item.quantity--
+                                else cartItems.remove(item)
+                            }) {
+                                Icon(Icons.Default.RemoveCircleOutline, null)
+                            }
+                            Text("${item.quantity}")
+                            IconButton(onClick = { item.quantity++ }) {
+                                Icon(Icons.Default.AddCircleOutline, null)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+        ) {
+            Column(Modifier.padding(24.dp)) {
+                Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
+                    Text("Subtotal")
+                    Text("Rp $subtotal")
+                }
+                Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
+                    Text("Ongkir")
+                    Text("Rp $ongkir")
+                }
+                Spacer(Modifier.height(8.dp))
+                HorizontalDivider()
+                Spacer(Modifier.height(8.dp))
+                Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
+                    Text("Total", fontWeight = FontWeight.Bold)
+                    Text("Rp $total", fontWeight = FontWeight.Bold)
+                }
+                Spacer(Modifier.height(16.dp))
+                Button(
+                    onClick = {
+                        if (cartItems.isEmpty()) return@Button
+
+                        val itemsText = cartItems.joinToString {
+                            "${it.name} x${it.quantity}"
+                        }
+
+                        com.example.luaslingkaranapp.navbar.OrderManager.addOrder(
+                            restaurantName = "Pesanan Kamu",
+                            foodName = itemsText,
+                            price = total,
+                            imageRes = R.drawable.resto_bakso
+                        )
+
+                        CartManager.clear()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Checkout Sekarang")
+                }
+
+
+            }
+        }
+    }
+}
+
+// --- HISTORY SCREEN ---
+@Composable
+fun HistoryScreen() {
+    val histories = com.example.luaslingkaranapp.navbar.OrderManager.orders
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFFF1F5F9))
+    ) {
+        item {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.White)
+                    .padding(16.dp)
+            ) {
+                Text("Riwayat Pesanan", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+
+        if (histories.isEmpty()) {
+            item {
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("Belum ada pesanan", color = Color.Gray)
+                }
+            }
+        }
+
+        items(histories) { history ->
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(history.restaurantName, fontWeight = FontWeight.Bold)
+                        Text(
+                            text = if (history.status == OrderStatus.SELESAI) "Selesai" else "Diproses",
+                            color = if (history.status == OrderStatus.SELESAI)
+                                Color(0xFF10B981) else Color(0xFFF59E0B),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Spacer(Modifier.height(4.dp))
+                    Text(history.date, fontSize = 12.sp, color = Color.Gray)
+
+                    Spacer(Modifier.height(8.dp))
+                    Text(history.foodName)
+                    Text("Rp ${history.price}", fontWeight = FontWeight.Bold)
+
+                    Spacer(Modifier.height(12.dp))
+
+                    Button(
+                        onClick = {
+                            CartManager.clear()
+                            CartManager.addItem(
+                                name = "Pesanan Sebelumnya",
+                                price = history.price,
+                                imageRes = R.drawable.resto_bakso
+                            )
+                        },
+                        border = BorderStroke(1.dp, Color.Blue),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.White)
+                    ) {
+                        Text("Pesan Lagi", color = Color.Blue)
+                    }
+                }
+            }
+        }
+    }
+}
+
+// --- KOMPONEN LAMA (Header, Promo, Category) ---
+
+@Composable
+fun HeaderSection(username: String) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(120.dp)
             .background(
                 Brush.verticalGradient(
-                    colors = listOf(Color(0xFF2563EB), Color(0xFF3B82F6))
+                    colors = listOf(Color(0xFF000000), Color(0xFF212121))
                 )
             )
             .padding(16.dp),
@@ -248,7 +510,7 @@ fun HeaderSection() {
     ) {
         Column {
             Text(
-                text = "Selamat Pagi, Wira!",
+                text = "Selamat Datang, $username!",
                 style = MaterialTheme.typography.titleLarge,
                 color = Color.White,
                 fontWeight = FontWeight.Bold
@@ -262,42 +524,33 @@ fun HeaderSection() {
     }
 }
 
-// fungsi untuk banner promo
 @Composable
-fun PromoSection(
-    banners: List<PromoBanner>,
-    onPromoClick: (PromoBanner) -> Unit
-) {
+fun PromoSection(banners: List<PromoBanner>) {
     Column(modifier = Modifier.padding(top = 24.dp)) {
         Text(
             text = "Promo Spesial Untukmu",
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 16.dp)
+            modifier = Modifier.padding(horizontal = 16.dp),
+            color = Color.Black
         )
-        // fungsi scroll horizontal
         LazyRow(
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             items(banners) { banner ->
-                PromoCard(banner = banner, onClick = { onPromoClick(banner) })
+                PromoCard(banner)
             }
         }
     }
 }
 
 @Composable
-fun PromoCard(
-    banner: PromoBanner,
-    onClick: () -> Unit
-) {
+fun PromoCard(banner: PromoBanner) {
     Card(
         shape = RoundedCornerShape(16.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-        modifier = Modifier
-            .size(width = 280.dp, height = 140.dp)
-            .clickable(onClick = onClick)
+        modifier = Modifier.size(width = 280.dp, height = 140.dp)
     ) {
         Image(
             painter = painterResource(id = banner.imageRes),
@@ -308,62 +561,75 @@ fun PromoCard(
     }
 }
 
-// fungsi untuk kategori makanan
 @Composable
 fun CategorySection(
     categories: List<FoodCategory>,
-    listener: CategoryClickListener
+    selectedCategory: String,
+    onCategorySelected: (FoodCategory) -> Unit
 ) {
     Column(modifier = Modifier.padding(top = 24.dp)) {
         Text(
             text = "Pilih Kategori",
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 16.dp)
+            modifier = Modifier.padding(horizontal = 16.dp),
+            color = Color.Black
         )
-        // fungsi scroll horizontal
         LazyRow(
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             items(categories) { category ->
-                CategoryItem(category = category, listener = listener)
+                CategoryItem(
+                    category = category,
+                    isSelected = selectedCategory == category.name,
+                    onClick = { onCategorySelected(category) }
+                )
             }
         }
     }
 }
 
-// fungsi untuk item kategori makanan
 @Composable
 fun CategoryItem(
     category: FoodCategory,
-    listener: CategoryClickListener
+    isSelected: Boolean,
+    onClick: () -> Unit
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
             .width(64.dp)
-            .clickable { listener.onCategoryClicked(category) }
+            .clickable { onClick() }
     ) {
-        Image(
-            painter = painterResource(id = category.iconRes),
-            contentDescription = category.name,
-            contentScale = ContentScale.Crop,
+        Box(
             modifier = Modifier
                 .size(64.dp)
                 .clip(CircleShape)
-                .background(Color.White)
-        )
+                .background(if (isSelected) Color(0xFF2563EB) else Color.White),
+            contentAlignment = Alignment.Center
+        ) {
+            if (category.name == "Semua") {
+                Icon(Icons.Filled.RestaurantMenu, contentDescription = "Semua", tint = if(isSelected) Color.White else Color.Gray)
+            } else {
+                Image(
+                    painter = painterResource(id = category.iconRes),
+                    contentDescription = category.name,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize().padding(if(isSelected) 4.dp else 0.dp)
+                )
+            }
+        }
         Spacer(modifier = Modifier.height(8.dp))
         Text(
             text = category.name,
             style = MaterialTheme.typography.bodySmall,
-            fontWeight = FontWeight.Medium
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+            color = if (isSelected) Color(0xFF2563EB) else Color.Black
         )
     }
 }
 
-// fungsi untuk menampilkan restoran
 @Composable
 fun RestaurantCard(
     restaurant: Restaurant,
@@ -391,7 +657,8 @@ fun RestaurantCard(
                 Text(
                     text = restaurant.name,
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    color = Color.Black
                 )
                 Text(
                     text = restaurant.category,
@@ -408,7 +675,7 @@ fun RestaurantCard(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "${restaurant.rating} \u2022 ${restaurant.distance}",
+                        text = "${restaurant.rating} • ${restaurant.distance}",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color.Gray
                     )
@@ -418,11 +685,10 @@ fun RestaurantCard(
     }
 }
 
-
 @Preview(showBackground = true)
 @Composable
 fun FoodAppPreview() {
     LuasLingkaranAppTheme {
-        FoodAppHomeScreen()
+        MainScreen()
     }
 }
