@@ -26,6 +26,8 @@ import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
 
 class RestaurantDetailActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -147,6 +149,8 @@ fun RestaurantDetailScreen(
 // Composable untuk menampilkan satu baris menu
 @Composable
 fun MenuItemRow(name: String, price: String) {
+    val context = LocalContext.current
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -161,11 +165,35 @@ fun MenuItemRow(name: String, price: String) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(text = name, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                 Text(text = price, color = Color.Gray)
             }
-            Button(onClick = { /* TODO: Logika tambah ke keranjang */ }) {
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            // Tombol tambah — gunakan name & price dari parameter
+            Button(
+                onClick = {
+                    // Konversi harga: hapus non-digit lalu parse
+                    val numeric = price.replace("[^0-9]".toRegex(), "")
+                    val priceInt = numeric.toIntOrNull() ?: 0
+
+                    com.example.luaslingkaranapp.navbar.CartManager.addItem(
+                        name,
+                        priceInt,
+                        R.drawable.resto_bakso
+                    )
+
+                    Toast.makeText(
+                        context,
+                        "$name berhasil ditambahkan ke keranjang",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                },
+                // ukur button supaya tidak memakan seluruh row
+                modifier = Modifier.wrapContentWidth()
+            ) {
                 Text("Tambah")
             }
         }

@@ -21,15 +21,33 @@
             android:value="AIzaSyBiY-QwRgX0LNq7ayPdIQl5_-4QfmQ8Aa4"
             />
         <activity
-            android:name=".MainActivity"  android:exported="true"
-            android:theme="@style/Theme.LuasLingkaranApp"> <intent-filter>
-            <action android:name="android.intent.action.MAIN" />
-            <category android:name="android.intent.category.LAUNCHER" />
-        </intent-filter>
+            android:name=".LoginActivity"
+            android:exported="true"
+            android:theme="@style/Theme.LuasLingkaranApp">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
         </activity>
 
         <activity
+            android:name=".RegistrationActivity"
+            android:exported="false"
+            android:theme="@style/Theme.LuasLingkaranApp" />
+
+        <activity
+            android:name=".DriverActivity"
+            android:exported="false"
+            android:theme="@style/Theme.LuasLingkaranApp" />
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="false"
+            android:theme="@style/Theme.LuasLingkaranApp" />
+
+        <activity
             android:name=".RestaurantDetailActivity"
-            android:exported="false" /> </application>
+            android:exported="false"
+            android:theme="@style/Theme.LuasLingkaranApp" /> </application>
 
 </manifest>
